@@ -25,6 +25,28 @@ Single architectural rule: **`web/` never calls models or DB directly.** Only `w
 
 ---
 
+## Starter Templates vs. Infrastructure (clarifying note)
+
+The hack lists four starter repos — **iPhone**, **Webapp**, **Cloudflare Workers Agent**, and **CLI**. These are **entry-point templates, not mutually exclusive ecosystems.** Cloudflare is the cloud the agent runs ON; it is not a UI medium that competes with "webapp."
+
+| Starter         | UI lives in            | Agent typically runs on                          |
+|-----------------|------------------------|--------------------------------------------------|
+| iPhone          | iOS app                | On-device model + Cloudflare for shared state   |
+| **Webapp**      | **Browser (React)**    | **Cloudflare Workers**                           |
+| Cloudflare      | (any client)           | Cloudflare Workers                               |
+| CLI             | Terminal               | Local or Cloudflare Workers                      |
+
+**FreightDesk uses BOTH the Webapp starter AND the Cloudflare Workers starter:**
+
+- Frontend scaffolding → `hack-webapp-starter` lineage, lives in `web/`
+- Agent runtime → `hack-cloudflare-workers-starter` lineage, lives in `worker/`
+
+One Worker deploys at `freightdesk.<team>.workers.dev`, serves the React static assets AND exposes the SSE agent API from the same origin (configured via `[assets]` in `wrangler.toml`). One URL, one deploy, full sponsor-stack coverage.
+
+Picking the Webapp track does **not** mean skipping Cloudflare — it means Cloudflare is the backend the webapp talks to. Same reasoning applies if a future iOS or CLI client gets added: they hit the same Worker.
+
+---
+
 ## Repo Tree
 
 ```
