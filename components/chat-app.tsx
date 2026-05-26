@@ -36,7 +36,7 @@ function MessagePart({
       <img
         src={part.url}
         alt={part.filename ?? "Uploaded image"}
-        className="mt-2 max-h-48 rounded-lg border border-border object-contain"
+        className="mt-2 max-h-48 rounded-lg border border-zinc-800 object-contain"
       />
     );
   }
@@ -47,10 +47,10 @@ function MessagePart({
     return (
       <div
         key={`${messageId}-tool-${index}`}
-        className="mt-2 rounded-lg border border-accent/30 bg-accent-muted px-3 py-2 text-xs"
+        className="mt-2 rounded-lg border border-[#FF5C28]/30 bg-[rgb(255_92_40/0.12)] px-3 py-2 text-xs"
       >
-        <div className="font-medium text-accent">Tool: {label}</div>
-        <div className="mt-1 text-muted">
+        <div className="font-medium text-[#FF5C28]">Tool: {label}</div>
+        <div className="mt-1 text-zinc-400">
           {state === "input-available" && "Calling…"}
           {state === "output-available" && "Done"}
           {state === "output-error" && "Error"}
@@ -111,29 +111,29 @@ export function ChatApp() {
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-background">
-      <header className="border-b border-border bg-black/90 backdrop-blur">
+    <div className="flex min-h-full flex-col bg-black">
+      <header className="border-b border-zinc-800 bg-black">
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-accent">
+            <p className="text-xs font-medium uppercase tracking-wider text-[#FF5C28]">
               Hackathon Starter
             </p>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            <h1 className="text-xl font-semibold tracking-tight text-white">
               Chat + Agents on Subconscious
             </h1>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 text-sm text-zinc-400">
               Wayfair · Subconscious · Baseten · Cloudflare
             </p>
           </div>
 
-          <div className="flex rounded-full border border-border bg-surface p-1">
+          <div className="flex rounded-full border border-zinc-800 bg-zinc-950 p-1">
             <button
               type="button"
               onClick={() => setMode("chat")}
               className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
                 mode === "chat"
-                  ? "bg-accent text-black"
-                  : "text-muted hover:text-foreground"
+                  ? "bg-[#FF5C28] text-black"
+                  : "text-zinc-400 hover:text-white"
               }`}
             >
               Chat
@@ -143,8 +143,8 @@ export function ChatApp() {
               onClick={() => setMode("agent")}
               className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
                 mode === "agent"
-                  ? "bg-accent text-black"
-                  : "text-muted hover:text-foreground"
+                  ? "bg-[#FF5C28] text-black"
+                  : "text-zinc-400 hover:text-white"
               }`}
             >
               Agent
@@ -154,20 +154,20 @@ export function ChatApp() {
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6">
-        <div className="mb-4 rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+        <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
           {mode === "chat" ? (
             <p>
-              <span className="font-medium text-accent">Chat mode</span> — fast
+              <span className="font-medium text-[#FF5C28]">Chat mode</span> — fast
               replies with basic tools. Attach an image for multimodal reasoning
               (use data URLs; see{" "}
-              <code className="rounded bg-surface-elevated px-1 text-foreground">
+              <code className="rounded bg-zinc-900 px-1 text-zinc-200">
                 lib/subconscious.ts
               </code>
               ).
             </p>
           ) : (
             <p>
-              <span className="font-medium text-accent">Agent mode</span> —
+              <span className="font-medium text-[#FF5C28]">Agent mode</span> —
               long-running multi-step agent with web search, background tasks, and
               MCP tool stubs. Kick off research and let it run up to 30 tool
               steps.
@@ -175,10 +175,10 @@ export function ChatApp() {
           )}
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-border bg-surface p-4">
+        <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
           {messages.length === 0 && (
-            <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center text-muted">
-              <p className="text-lg font-medium text-foreground">
+            <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center text-zinc-500">
+              <p className="text-lg font-medium text-zinc-200">
                 Try something to get started
               </p>
               <ul className="mt-4 max-w-md space-y-2 text-sm">
@@ -201,15 +201,15 @@ export function ChatApp() {
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                   message.role === "user"
-                    ? "bg-accent text-black"
-                    : "border border-border bg-surface-elevated text-foreground"
+                    ? "bg-[#FF5C28] text-black"
+                    : "border border-zinc-800 bg-zinc-900 text-zinc-100"
                 }`}
               >
                 <div
                   className={`mb-1 text-xs font-medium uppercase tracking-wide ${
                     message.role === "user"
                       ? "text-black/60"
-                      : "text-accent"
+                      : "text-[#FF5C28]"
                   }`}
                 >
                   {message.role}
@@ -227,8 +227,8 @@ export function ChatApp() {
           ))}
 
           {isBusy && (
-            <div className="flex items-center gap-2 text-sm text-muted">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#FF5C28]" />
               {mode === "agent" ? "Agent running…" : "Thinking…"}
             </div>
           )}
@@ -242,14 +242,14 @@ export function ChatApp() {
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           {imageFile && (
-            <div className="flex items-center gap-2 text-sm text-muted">
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
               <span>
                 Image:{" "}
-                <span className="text-accent">{imageFile.name}</span>
+                <span className="text-[#FF5C28]">{imageFile.name}</span>
               </span>
               <button
                 type="button"
-                className="text-accent hover:text-accent-hover hover:underline"
+                className="text-[#FF5C28] hover:text-[#ff7347] hover:underline"
                 onClick={() => {
                   setImageFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = "";
@@ -274,7 +274,7 @@ export function ChatApp() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:border-accent hover:text-accent"
+              className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm font-medium text-zinc-200 hover:border-[#FF5C28] hover:text-[#FF5C28]"
               title="Attach image for multimodal reasoning"
             >
               Image
@@ -287,14 +287,14 @@ export function ChatApp() {
                   ? "Kick off a long-running agent task…"
                   : "Send a message…"
               }
-              className="flex-1 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-[#FF5C28] focus:ring-2 focus:ring-[#FF5C28]/30"
               disabled={isBusy}
             />
             {isBusy ? (
               <button
                 type="button"
                 onClick={() => stop()}
-                className="rounded-xl border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-foreground hover:border-accent"
+                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-[#FF5C28]"
               >
                 Stop
               </button>
@@ -302,7 +302,7 @@ export function ChatApp() {
               <button
                 type="submit"
                 disabled={!input.trim() && !imageFile}
-                className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-hover disabled:opacity-40"
+                className="rounded-xl bg-[#FF5C28] px-4 py-2 text-sm font-medium text-black hover:bg-[#ff7347] disabled:opacity-40"
               >
                 Send
               </button>
