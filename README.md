@@ -1,121 +1,166 @@
-# Hackathon Starter — Chat & Agents on Subconscious
+# Wayfair × Subconscious Hackathon Starter
 
-A minimal Next.js app for the **Wayfair × Subconscious × Baseten × Cloudflare** hackathon. Chat with TIM-Qwen3.6, kick off long-running agents, attach images, and extend with your own tools and MCP servers.
+Build AI agents on **Subconscious** (TIM-Qwen3.6) with the **Vercel AI SDK**. This repo gives you a working chat UI, long-running agent mode, example tools, and an MCP template — so you can focus on your track, not boilerplate.
 
-## Get started in 3 minutes
+**Sponsors:** Wayfair · Subconscious · Baseten · Cloudflare
 
-### 1. Get a Subconscious API key
+---
 
-You need a Subconscious API key to run inference.
+## Pick your track
 
-1. Go to **[subconscious.dev/platform](https://www.subconscious.dev/platform)**
-2. Sign up and create an API key (starts with `sky_`)
-3. Copy it — you'll add it to `.env.local`
+Choose one challenge. Your agent should use tools (APIs, MCP, functions) and talk to users through the built-in UI.
 
-### 2. Install and run
+### Track 1 — Consumer Shopping Experience
+
+Millions of customers shop for furniture on Wayfair every day.
+
+**Challenge:** Build an agent that improves discovery and the buyer experience.
+
+**Ideas to explore:**
+- Style or room-based product recommendations
+- “Help me furnish this room” from a photo or description
+- Compare options, explain tradeoffs, answer sizing questions
+- Guided search instead of endless filters
+
+### Track 2 — Supply Chain
+
+Wayfair and its supplier network move huge volumes of furniture worldwide.
+
+**Challenge:** Build an agent that improves Wayfair’s ability to manage its supply chain.
+
+**Ideas to explore:**
+- Track shipments, flag delays, summarize status
+- Answer “where is order X?” or “what’s at risk this week?”
+- Coordinate supplier updates, inventory, or routing decisions
+- Turn messy ops data into clear next steps
+
+### Track 3 — FinOps & Customer Service
+
+Wayfair runs ~$12B in revenue and serves ~22M customers a year.
+
+**Challenge:** Build an agent system that improves internal operations — financial operations or customer service.
+
+**Ideas to explore:**
+- Triage support tickets and draft responses
+- Look up order/billing history and explain charges
+- Summarize finance or ops metrics for a team
+- Route issues to the right team with context
+
+---
+
+## Quick start
+
+**1. Get a Subconscious API key**
+
+Sign up at [subconscious.dev/platform](https://www.subconscious.dev/platform) and copy your key (`sky_...`).
+
+**2. Run the app**
 
 ```bash
 pnpm install
 cp .env.example .env.local
-# Edit .env.local and set SUBCONSCIOUS_API_KEY=sky_...
+# Set SUBCONSCIOUS_API_KEY in .env.local
 
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### 3. Try it
+**3. Try the two modes**
 
-- **Chat mode** — quick back-and-forth with weather & calculator tools
-- **Agent mode** — multi-step research agent (web search stub, long tasks, MCP examples)
-- **Image button** — attach a screenshot or photo for multimodal reasoning (data URLs work best)
+- **Chat** — fast Q&A with demo tools (good for prototyping UX)
+- **Agent** — multi-step runs with search, long tasks, and MCP stubs (good for track demos)
 
-## What's in the box
+Use **Image** to attach a photo (e.g. a room shot for Track 1).
 
-| Piece | Location | Purpose |
-|-------|----------|---------|
-| Subconscious provider | `lib/subconscious.ts` | OpenAI-compatible client → `api.subconscious.dev` |
-| Chat agent | `lib/agents/index.ts` | Fast chat, 8 tool steps max |
-| Research agent | `lib/agents/index.ts` | Long-running, 30 tool steps, thinking on |
-| Example tools | `lib/tools/index.ts` | Weather, math, web search stub, long task |
-| MCP bridge template | `lib/tools/mcp-tools.ts` | Wrap MCP tools as AI SDK tools |
-| Chat API | `app/api/chat/route.ts` | Streams agent output via Vercel AI SDK |
-| UI | `components/chat-app.tsx` | Chat + agent mode toggle, image upload |
+---
 
-Built with [Vercel AI SDK](https://ai-sdk.dev) `ToolLoopAgent` and [Subconscious](https://www.subconscious.dev) inference (TIM-Qwen3.6-27B on Baseten/sglang).
+## How to build on this repo
 
-## Hackathon extension points
+You mostly edit three places:
+
+| What | Where |
+|------|--------|
+| Tools (APIs, data, actions) | `lib/tools/index.ts` |
+| Agent behavior & prompts | `lib/agents/index.ts` |
+| MCP integrations | `lib/tools/mcp-tools.ts` |
 
 ### Add a tool
 
-Edit `lib/tools/index.ts`:
+Tools are functions your agent can call. Example:
 
 ```typescript
-import { tool } from "ai";
-import { z } from "zod";
-
-export const myTool = tool({
-  description: "What this tool does",
+// lib/tools/index.ts
+export const searchProducts = tool({
+  description: "Search furniture by style, room, or keyword",
   inputSchema: z.object({ query: z.string() }),
   execute: async ({ query }) => {
-    // Call your API, database, Cloudflare Worker, Baseten endpoint…
-    return { result: query };
+    // Call your API, mock data, or Cloudflare Worker
+    return { results: [] };
   },
 });
 ```
 
-Register it in `chatTools` or `agentTools`, then restart the dev server.
+Add it to `agentTools` in the same file, then customize the prompt in `lib/agents/index.ts` for your track.
 
-### Connect MCP servers
+### Connect MCP
 
-See `lib/tools/mcp-tools.ts` for the bridge pattern. MCP tools become standard OpenAI function tools that Subconscious can call — your server executes them client-side in the agent loop.
+MCP servers expose tools (files, APIs, databases). Wrap them as AI SDK tools — see `lib/tools/mcp-tools.ts`.
 
 ```bash
 pnpm add @modelcontextprotocol/sdk
 ```
 
-Wire your MCP client's `callTool()` inside each tool's `execute` function.
+### Images (multimodal)
 
-### Multimodal (images)
-
-The UI sends images as base64 data URLs. Subconscious supports vision via `image_url` blocks — data URLs are the most reliable path. See `.agents/skills/subconscious-dev/references/multimodal.md`.
+The UI sends images as data URLs. Useful for room photos, screenshots, or docs. Details: `.agents/skills/subconscious-dev/references/multimodal.md`.
 
 ### Long-running agents
 
-Agent mode uses `stopWhen: stepCountIs(30)` and `maxDuration = 300` on the API route. Tune these in `lib/agents/index.ts` and `app/api/chat/route.ts`.
+**Agent** mode runs up to 30 tool steps (`lib/agents/index.ts`). The API allows 5-minute runs (`app/api/chat/route.ts`). Increase either if your demo needs it.
 
-## AI agent skill (included)
+---
 
-This repo ships the **subconscious-dev** skill so coding agents understand the API:
+## What’s included
+
+- **Subconscious provider** — `lib/subconscious.ts`
+- **Chat + research agents** — `lib/agents/index.ts`
+- **Example tools** — weather, calculator, web search stub, long task
+- **Streaming API** — `app/api/chat/route.ts`
+- **Chat UI** — `components/chat-app.tsx`
+- **Subconscious API skill** — `.agents/skills/subconscious-dev/` (for Cursor/Codex)
+
+Re-install the skill anytime:
 
 ```bash
 npx skills add https://github.com/subconscious-systems/skills --skill subconscious-dev
 ```
 
-Skill files live in `.agents/skills/subconscious-dev/`.
+---
 
-## Environment variables
+## Environment
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SUBCONSCIOUS_API_KEY` | Yes | API key from [subconscious.dev/platform](https://www.subconscious.dev/platform) |
+| Variable | Required |
+|----------|----------|
+| `SUBCONSCIOUS_API_KEY` | Yes — [get one here](https://www.subconscious.dev/platform) |
+
+---
 
 ## Deploy
 
-Works on Vercel, Cloudflare Pages, or any Node host. Set `SUBCONSCIOUS_API_KEY` in your deployment environment.
+Set `SUBCONSCIOUS_API_KEY` on your host, then:
 
 ```bash
-pnpm build
-pnpm start
+pnpm build && pnpm start
 ```
 
-## Sponsors
+Works on Vercel, Cloudflare, or any Node host.
 
-Built for hackers working with **Wayfair**, **Subconscious**, **Baseten**, and **Cloudflare**. Subconscious powers the model; Baseten serves inference; extend with Cloudflare Workers and MCP for your project.
+---
 
 ## Links
 
-- [Subconscious Platform](https://www.subconscious.dev/platform) — get your API key
+- [Subconscious Platform](https://www.subconscious.dev/platform) — API keys
 - [Subconscious Docs](https://docs.subconscious.dev)
-- [Vercel AI SDK Agents](https://ai-sdk.dev/docs/agents/overview)
-- [Subconscious API skill](https://github.com/subconscious-systems/skills)
+- [Vercel AI SDK — Agents](https://ai-sdk.dev/docs/agents/overview)
+- [Subconscious skills repo](https://github.com/subconscious-systems/skills)

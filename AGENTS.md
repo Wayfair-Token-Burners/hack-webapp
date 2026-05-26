@@ -6,18 +6,26 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Hackathon starter
 
-Next.js app with chat + long-running agents on **Subconscious** via the **Vercel AI SDK**.
+Next.js chat + agents on **Subconscious** via **Vercel AI SDK** `ToolLoopAgent`.
 
-## Before you code
+## Hackathon tracks
 
-1. Read `.agents/skills/subconscious-dev/SKILL.md` for Subconscious API details.
-2. Key env var: `SUBCONSCIOUS_API_KEY` (from https://www.subconscious.dev/platform).
-3. Extend tools in `lib/tools/` and agents in `lib/agents/`.
+1. **Consumer shopping** — discovery & buyer experience for furniture
+2. **Supply chain** — manage shipping, suppliers, inventory, ops
+3. **FinOps & customer service** — internal ops, finance, support
 
-## Layout
+See `README.md` for full challenge descriptions and starter ideas.
+
+## Before coding
+
+1. `SUBCONSCIOUS_API_KEY` required — https://www.subconscious.dev/platform
+2. Subconscious API reference: `.agents/skills/subconscious-dev/SKILL.md`
+3. Extend tools in `lib/tools/`, agents in `lib/agents/`
+
+## Repo map
 
 - `lib/subconscious.ts` — model provider
-- `lib/tools/` — function tools + MCP bridge template
-- `lib/agents/` — `ToolLoopAgent` chat vs research agents
+- `lib/tools/` — function tools + MCP template
+- `lib/agents/` — chat vs research agents
 - `app/api/chat/route.ts` — streaming API
 - `components/chat-app.tsx` — UI
