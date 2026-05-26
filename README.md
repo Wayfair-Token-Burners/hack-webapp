@@ -4,7 +4,7 @@
 > Boston Tech Week · Subconscious × Wayfair × Baseten × Cloudflare hackathon (2-hour sprint)
 > Track 2 — Agents for Supply Chain
 
-> **Repo state (refactor in progress).** The existing working prototype — a Next.js + Vercel AI SDK + Subconscious `ToolLoopAgent` chat app — now lives entirely under `worker/`. The `db/`, `web/`, and `scripts/` partitions are scaffolded but empty; see "Where to Implement What" below for the 2-hour partition plan. To run the current prototype: `cd worker && pnpm install && pnpm dev`.
+> **Repo state (refactor in progress).** The existing working prototype, a Next.js + Vercel AI SDK + Subconscious `ToolLoopAgent` chat app — now lives entirely under `worker/`. The `db/`, `web/`, and `scripts/` partitions are scaffolded but empty; see "Where to Implement What" below for the 2-hour partition plan. To run the current prototype: `cd worker && pnpm install && pnpm dev`.
 
 Maria Chen is a Tier-2 Exception Ops analyst. She walks in at 7:42am to **247 freight exceptions** in her queue — damaged pallets, OS&D shorts, missed appointments, BOL mismatches. By lunch she needs zero.
 
