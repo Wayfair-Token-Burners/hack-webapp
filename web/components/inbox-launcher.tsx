@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   COMPLAINTS,
+  evidenceTypeIcon,
   formatReceivedAt,
+  ltvBandLabel,
   severityColor,
+  workerExceptionId,
   type Complaint,
 } from "@/lib/complaints";
 import { OPEN_MIC_EVENT, type OpenMicDetail } from "./mic-launcher";
@@ -156,6 +159,9 @@ function InboxModal({
                   <span className="text-[10px] uppercase tracking-wide text-mc-ink-soft">
                     {c.category}
                   </span>
+                  <span className="font-mono text-[10px] text-mc-ink-soft">
+                    {c.exception.id}
+                  </span>
                   {c.poNumber ? (
                     <span className="font-mono text-[11px] text-mc-blue-link">
                       PO #{c.poNumber}
@@ -168,8 +174,42 @@ function InboxModal({
                 <div className="mt-1 text-[13px] font-semibold leading-tight">
                   {c.subject}
                 </div>
-                <div className="mt-0.5 text-[11.5px] text-mc-ink-soft">
-                  {c.from.name} · {c.from.company}
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-mc-ink-soft">
+                  <span>
+                    {c.from.name} · {c.from.company}
+                  </span>
+                  <span className="rounded-sm border border-mc-border px-1 text-[10px] font-semibold uppercase tracking-wide">
+                    {ltvBandLabel(c.customer.ltv_band)}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-mc-ink-soft">
+                  {c.exception.carrier ? (
+                    <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5">
+                      {c.exception.carrier}
+                    </span>
+                  ) : null}
+                  {c.exception.lane ? (
+                    <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5 font-mono">
+                      {c.exception.lane}
+                    </span>
+                  ) : null}
+                  {c.exception.sku ? (
+                    <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5 font-mono">
+                      {c.exception.sku}
+                    </span>
+                  ) : null}
+                  {c.evidence.length > 0 ? (
+                    <span className="ml-auto inline-flex items-center gap-0.5">
+                      {c.evidence.map((ev) => (
+                        <span
+                          key={ev.id}
+                          title={`${ev.type} · ${ev.label ?? ev.r2_key}`}
+                        >
+                          {evidenceTypeIcon(ev.type)}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-2 border-l-2 border-mc-blue-link bg-mc-bg px-2 py-1.5 text-[12px] leading-snug">
                   <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-mc-blue-link">
@@ -209,15 +249,32 @@ function DetailModal({
   onClose: () => void;
   onCloseAll: () => void;
 }) {
-  const onDraftReply = () => {
-    const detail: OpenMicDetail = {
-      label: `Re: ${complaint.subject} — ${complaint.from.name}, ${complaint.from.company}`,
-      suggestions: complaint.draftSuggestions,
-    };
+  const workerId = workerExceptionId(complaint.exception.id);
+
+  const dispatchMic = (detail: OpenMicDetail) => {
     window.dispatchEvent(
       new CustomEvent<OpenMicDetail>(OPEN_MIC_EVENT, { detail }),
     );
     onCloseAll();
+  };
+
+  const label = `Re: ${complaint.subject} — ${complaint.from.name}, ${complaint.from.company}`;
+
+  const onRunAgent = () => {
+    if (!workerId) {
+      dispatchMic({ label, suggestions: complaint.draftSuggestions });
+      return;
+    }
+    dispatchMic({
+      label,
+      suggestions: complaint.draftSuggestions,
+      exceptionId: workerId,
+      autoRun: true,
+    });
+  };
+
+  const onSuggestReplies = () => {
+    dispatchMic({ label, suggestions: complaint.draftSuggestions });
   };
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -232,7 +289,7 @@ function DetailModal({
       <article className="relative flex h-[80vh] max-h-[760px] w-full max-w-[760px] flex-col overflow-hidden rounded-md border-2 border-black bg-white shadow-2xl [animation:fd-pop-in_240ms_cubic-bezier(0.2,0.8,0.2,1)]">
         <header className="flex items-start gap-3 border-b border-mc-border bg-white px-5 py-3">
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${severityColor(complaint.severity)}`}
               >
@@ -241,9 +298,22 @@ function DetailModal({
               <span className="text-[10px] uppercase tracking-wide text-mc-ink-soft">
                 {complaint.category}
               </span>
+              <span className="font-mono text-[10px] text-mc-ink-soft">
+                {complaint.exception.id}
+              </span>
               {complaint.poNumber ? (
                 <span className="font-mono text-[11px] text-mc-blue-link">
                   PO #{complaint.poNumber}
+                </span>
+              ) : null}
+              {complaint.order.bol_number ? (
+                <span className="font-mono text-[10px] text-mc-ink-soft">
+                  {complaint.order.bol_number}
+                </span>
+              ) : null}
+              {complaint.order.asn_id ? (
+                <span className="font-mono text-[10px] text-mc-ink-soft">
+                  {complaint.order.asn_id}
                 </span>
               ) : null}
             </div>
@@ -253,9 +323,48 @@ function DetailModal({
             <div className="mt-1 text-[12px] text-mc-ink-soft">
               <b className="text-mc-ink">{complaint.from.name}</b> &lt;
               {complaint.from.email}&gt; · {complaint.from.company}
+              <span className="ml-1 rounded-sm border border-mc-border px-1 text-[10px] font-semibold uppercase tracking-wide">
+                {ltvBandLabel(complaint.customer.ltv_band)} ·{" "}
+                {complaint.customer.sla_tier}
+              </span>
               <span className="ml-2">
                 {new Date(complaint.receivedAt).toUTCString()}
               </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10.5px] text-mc-ink-soft">
+              {complaint.exception.carrier ? (
+                <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5">
+                  {complaint.exception.carrier}
+                </span>
+              ) : null}
+              {complaint.exception.lane ? (
+                <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5 font-mono">
+                  {complaint.exception.lane}
+                </span>
+              ) : null}
+              {complaint.exception.sku ? (
+                <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5 font-mono">
+                  {complaint.exception.sku}
+                </span>
+              ) : null}
+              <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5">
+                qty {complaint.order.quantity}
+              </span>
+              <span className="rounded-sm border border-mc-border bg-white px-1 py-0.5">
+                ${complaint.order.unit_value_usd.toLocaleString()}/ea
+              </span>
+              {complaint.evidence.length > 0 ? (
+                <span className="ml-auto inline-flex items-center gap-1">
+                  {complaint.evidence.map((ev) => (
+                    <span
+                      key={ev.id}
+                      title={`${ev.type} · ${ev.label ?? ev.r2_key}`}
+                    >
+                      {evidenceTypeIcon(ev.type)}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </div>
           </div>
           <button
@@ -274,14 +383,29 @@ function DetailModal({
             AI Summary
           </div>
           <p className="text-[12.5px] leading-snug">{complaint.summary}</p>
-          <div className="mt-2 flex gap-1.5 text-[11px]">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
             <button
               type="button"
-              onClick={onDraftReply}
+              onClick={onRunAgent}
               className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 font-semibold hover:bg-mc-yellow-dark"
+              title={
+                workerId
+                  ? `Run the Wayfair AI agent against worker ${workerId}`
+                  : "Open the mic with suggested replies (no worker hero case mapped)"
+              }
             >
-              Draft reply
+              {workerId ? "Run AI agent · Draft reply" : "Draft reply"}
             </button>
+            {workerId ? (
+              <button
+                type="button"
+                onClick={onSuggestReplies}
+                className="rounded-sm border border-mc-border bg-white px-2 py-0.5 hover:border-black"
+                title="Show suggested reply blobs instead of running the agent"
+              >
+                Suggest only
+              </button>
+            ) : null}
             <button
               type="button"
               className="rounded-sm border border-mc-border bg-white px-2 py-0.5 hover:border-black"
@@ -300,6 +424,11 @@ function DetailModal({
             >
               Archive
             </button>
+            {workerId ? (
+              <span className="ml-auto font-mono text-[10px] text-mc-ink-soft">
+                agent target: {workerId}
+              </span>
+            ) : null}
           </div>
         </div>
 

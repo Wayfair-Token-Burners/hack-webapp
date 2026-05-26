@@ -10,6 +10,33 @@ import {
 
 type PlanStep = { kind: string; label: string; detail: string };
 
+export type DraftMessages = {
+  carrier_message?: string;
+  customer_message?: string;
+  ar_note?: string;
+};
+
+type WorkerStep = {
+  step: number;
+  tool: string;
+  sponsor: string;
+  label: string;
+  detail: string;
+};
+
+type WorkerDecision = {
+  disposition_code: string;
+  confidence: number;
+  reasoning: string;
+};
+
+type WorkerResult = {
+  disposition_code: string;
+  confidence: number;
+  dollar_impact: number;
+  completed_at: string;
+};
+
 type UserMsg = { id: string; role: "user"; content: string };
 type PlanMsg = {
   id: string;
@@ -19,15 +46,37 @@ type PlanMsg = {
   steps: PlanStep[];
   status: "planning" | "ready" | "approved" | "rejected" | "superseded";
   refining?: boolean;
+  exceptionId?: string;
 };
-type ExecutionMsg = { id: string; role: "execution"; content: string };
+type ExecutionMsg = {
+  id: string;
+  role: "execution";
+  exceptionId?: string;
+  trace: string;
+  steps: WorkerStep[];
+  decision?: WorkerDecision;
+  drafts?: DraftMessages;
+  result?: WorkerResult;
+  done: boolean;
+  error?: string;
+};
 type NoteMsg = { id: string; role: "note"; content: string };
 type Message = UserMsg | PlanMsg | ExecutionMsg | NoteMsg;
 
 type Status = "idle" | "listening" | "planning" | "awaiting" | "executing";
-type MicContext = { label: string; suggestions: string[] };
+type MicContext = {
+  label: string;
+  suggestions: string[];
+  exceptionId?: string;
+  autoRun?: boolean;
+};
 
-export type OpenMicDetail = { label: string; suggestions: string[] };
+export type OpenMicDetail = {
+  label: string;
+  suggestions: string[];
+  exceptionId?: string;
+  autoRun?: boolean;
+};
 
 export const OPEN_MIC_EVENT = "wayfair:open-mic";
 
@@ -86,7 +135,12 @@ export function MicLauncher() {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<OpenMicDetail>;
       if (!ce.detail) return;
-      setContext({ label: ce.detail.label, suggestions: ce.detail.suggestions });
+      setContext({
+        label: ce.detail.label,
+        suggestions: ce.detail.suggestions,
+        exceptionId: ce.detail.exceptionId,
+        autoRun: ce.detail.autoRun,
+      });
       setMessages([]);
       setDraft("");
       setTranscript("");
@@ -245,6 +299,7 @@ export function MicLauncher() {
         intent: "",
         steps: [],
         status: "planning",
+        exceptionId: context?.exceptionId,
       };
 
       setMessages((prev) => {
@@ -260,7 +315,120 @@ export function MicLauncher() {
       setStatus("planning");
       void planFor(question, planId, opts?.extraContext ?? []);
     },
-    [cancelAutoSend, planFor, stopListening],
+    [cancelAutoSend, context?.exceptionId, planFor, stopListening],
+  );
+
+  const streamRun = useCallback(
+    async (execId: string, payload: Record<string, unknown>) => {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      try {
+        const res = await fetch("/api/run", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal,
+        });
+        if (!res.body) throw new Error("no body");
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const raw of lines) {
+            const line = raw.trim();
+            if (!line) continue;
+            let evt: { type: string; [k: string]: unknown };
+            try {
+              evt = JSON.parse(line);
+            } catch {
+              continue;
+            }
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== execId || m.role !== "execution") return m;
+                if (evt.type === "text") {
+                  return { ...m, trace: m.trace + String(evt.text ?? "") };
+                }
+                if (evt.type === "info") {
+                  return {
+                    ...m,
+                    trace: m.trace + `· ${evt.text ?? ""}\n`,
+                  };
+                }
+                if (evt.type === "step") {
+                  const step: WorkerStep = {
+                    step: Number(evt.step ?? m.steps.length + 1),
+                    tool: String(evt.tool ?? ""),
+                    sponsor: String(evt.sponsor ?? ""),
+                    label: String(evt.label ?? evt.tool ?? ""),
+                    detail: String(evt.detail ?? ""),
+                  };
+                  return { ...m, steps: [...m.steps, step] };
+                }
+                if (evt.type === "decision") {
+                  return {
+                    ...m,
+                    decision: {
+                      disposition_code: String(evt.disposition_code ?? ""),
+                      confidence: Number(evt.confidence ?? 0),
+                      reasoning: String(evt.reasoning ?? ""),
+                    },
+                  };
+                }
+                if (evt.type === "drafts") {
+                  return {
+                    ...m,
+                    drafts: (evt.drafts ?? {}) as DraftMessages,
+                  };
+                }
+                if (evt.type === "result") {
+                  return {
+                    ...m,
+                    result: {
+                      disposition_code: String(evt.disposition_code ?? ""),
+                      confidence: Number(evt.confidence ?? 0),
+                      dollar_impact: Number(evt.dollar_impact ?? 0),
+                      completed_at: String(
+                        evt.completed_at ?? new Date().toISOString(),
+                      ),
+                    },
+                  };
+                }
+                if (evt.type === "error") {
+                  return {
+                    ...m,
+                    error: String(evt.message ?? "agent error"),
+                  };
+                }
+                if (evt.type === "done") {
+                  return { ...m, done: true };
+                }
+                return m;
+              }),
+            );
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === execId && m.role === "execution"
+                ? { ...m, error: "Agent call failed.", done: true }
+                : m,
+            ),
+          );
+        }
+      } finally {
+        setStatus("idle");
+        abortRef.current = null;
+      }
+    },
+    [],
   );
 
   const approvePlan = useCallback(
@@ -277,56 +445,65 @@ export function MicLauncher() {
         ),
       );
       const execId = nextId();
-      setMessages((prev) => [
-        ...prev,
-        { id: execId, role: "execution", content: "" },
-      ]);
+      const execMsg: ExecutionMsg = {
+        id: execId,
+        role: "execution",
+        exceptionId: target.exceptionId,
+        trace: "",
+        steps: [],
+        done: false,
+      };
+      setMessages((prev) => [...prev, execMsg]);
+      setStatus("executing");
+      await streamRun(execId, {
+        question: target.question,
+        plan: { intent: target.intent, steps: target.steps },
+        exceptionId: target.exceptionId,
+      });
+    },
+    [messages, streamRun],
+  );
+
+  const executeForException = useCallback(
+    async (exceptionId: string, label: string) => {
+      cancelAutoSend();
+      stopListening();
+      setTranscript("");
+      setDraft("");
+
+      const userMsg: UserMsg = {
+        id: nextId(),
+        role: "user",
+        content: `Run agent for ${exceptionId} · ${label}`,
+      };
+      const execId = nextId();
+      const execMsg: ExecutionMsg = {
+        id: execId,
+        role: "execution",
+        exceptionId,
+        trace: "",
+        steps: [],
+        done: false,
+      };
+      setMessages((prev) => [...prev, userMsg, execMsg]);
       setStatus("executing");
 
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
-      try {
-        const res = await fetch("/api/run", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            question: target.question,
-            plan: { intent: target.intent, steps: target.steps },
-          }),
-          signal: ctrl.signal,
-        });
-        if (!res.body) throw new Error("no body");
-        const reader = res.body.getReader();
-        const dec = new TextDecoder();
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = dec.decode(value, { stream: true });
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === execId && m.role === "execution"
-                ? { ...m, content: m.content + chunk }
-                : m,
-            ),
-          );
-        }
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === execId && m.role === "execution"
-                ? { ...m, content: m.content + "\n⚠ Agent call failed." }
-                : m,
-            ),
-          );
-        }
-      } finally {
-        setStatus("idle");
-        abortRef.current = null;
-      }
+      await streamRun(execId, {
+        exceptionId,
+        question: label,
+      });
     },
-    [messages],
+    [cancelAutoSend, stopListening, streamRun],
   );
+
+  // Auto-run agent when opened with autoRun + exceptionId (from inbox Draft reply).
+  useEffect(() => {
+    if (!context?.autoRun || !context.exceptionId) return;
+    const exId = context.exceptionId;
+    const label = context.label;
+    setContext((c) => (c ? { ...c, autoRun: false } : c));
+    void executeForException(exId, label);
+  }, [context, executeForException]);
 
   const rejectPlan = useCallback((planId: string) => {
     setMessages((prev) => {
@@ -678,17 +855,216 @@ function NoteRow({ msg }: { msg: NoteMsg }) {
 }
 
 function ExecutionBubble({ msg }: { msg: ExecutionMsg }) {
+  const liveCaret = !msg.done;
   return (
-    <div className="mr-6 border border-mc-blue bg-white px-2 py-1.5">
-      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-mc-blue">
-        Agent · Executing
-      </div>
-      <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
-        {msg.content}
-        {!msg.content.includes("placeholder") ? (
-          <span className="inline-block h-3 w-1 animate-pulse bg-mc-ink align-middle" />
+    <div className="mr-6 space-y-1.5 border border-mc-blue bg-white px-2 py-1.5">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-mc-blue">
+          Agent · {msg.exceptionId ? `running ${msg.exceptionId}` : "executing"}
+        </div>
+        {msg.result ? (
+          <span className="rounded-sm border border-mc-blue bg-mc-blue/10 px-1 py-0.5 font-mono text-[10px] text-mc-blue">
+            {msg.result.disposition_code} · {(msg.result.confidence * 100).toFixed(0)}%
+            {" · $"}
+            {msg.result.dollar_impact.toFixed(2)}
+          </span>
+        ) : msg.decision ? (
+          <span className="rounded-sm border border-mc-yellow-dark bg-mc-yellow/30 px-1 py-0.5 font-mono text-[10px]">
+            {msg.decision.disposition_code} ·{" "}
+            {(msg.decision.confidence * 100).toFixed(0)}%
+          </span>
         ) : null}
-      </pre>
+      </div>
+
+      {msg.steps.length > 0 ? (
+        <ol className="space-y-0.5 border-l-2 border-mc-blue/30 pl-2">
+          {msg.steps.map((s) => (
+            <li
+              key={`${s.step}-${s.tool}`}
+              className="text-[11px] leading-snug"
+            >
+              <span className="mr-1 font-mono text-mc-ink-soft">
+                {String(s.step).padStart(2, "0")}
+              </span>
+              <span className="font-semibold">{s.label}</span>
+              {s.sponsor ? (
+                <span className="ml-1 rounded-sm border border-mc-border bg-mc-bg px-1 text-[9px] font-semibold uppercase tracking-wide text-mc-ink-soft">
+                  {s.sponsor}
+                </span>
+              ) : null}
+              {s.detail ? (
+                <div className="ml-5 text-[10.5px] text-mc-ink-soft">
+                  {s.detail}
+                </div>
+              ) : null}
+            </li>
+          ))}
+          {liveCaret && !msg.drafts ? (
+            <li className="text-[10.5px] text-mc-ink-soft">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-mc-blue align-middle" />{" "}
+              running…
+            </li>
+          ) : null}
+        </ol>
+      ) : null}
+
+      {msg.trace ? (
+        <pre className="whitespace-pre-wrap rounded-sm bg-mc-bg p-1.5 font-mono text-[10.5px] leading-snug text-mc-ink-soft">
+          {msg.trace}
+        </pre>
+      ) : null}
+
+      {msg.error ? (
+        <div className="border border-mc-red bg-mc-red/10 px-1.5 py-1 text-[11px] text-mc-red">
+          ⚠ {msg.error}
+        </div>
+      ) : null}
+
+      {msg.drafts ? <DraftCards drafts={msg.drafts} /> : null}
+    </div>
+  );
+}
+
+function DraftCards({ drafts }: { drafts: DraftMessages }) {
+  const items: Array<{
+    key: keyof DraftMessages;
+    label: string;
+    recipient: string;
+    body: string;
+  }> = [];
+  if (drafts.customer_message) {
+    items.push({
+      key: "customer_message",
+      label: "Customer reply",
+      recipient: "→ customer",
+      body: drafts.customer_message,
+    });
+  }
+  if (drafts.carrier_message) {
+    items.push({
+      key: "carrier_message",
+      label: "Carrier message",
+      recipient: "→ carrier ops",
+      body: drafts.carrier_message,
+    });
+  }
+  if (drafts.ar_note) {
+    items.push({
+      key: "ar_note",
+      label: "AR note",
+      recipient: "→ accounting",
+      body: drafts.ar_note,
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-1 space-y-1.5">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-mc-blue-link">
+        Drafted by agent · review before sending
+      </div>
+      {items.map((d) => (
+        <DraftCard key={d.key} label={d.label} recipient={d.recipient} body={d.body} />
+      ))}
+    </div>
+  );
+}
+
+function DraftCard({
+  label,
+  recipient,
+  body,
+}: {
+  label: string;
+  recipient: string;
+  body: string;
+}) {
+  const [sent, setSent] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(body);
+
+  // Reset state if the underlying draft changes
+  useEffect(() => {
+    setText(body);
+    setSent(false);
+    setEditing(false);
+  }, [body]);
+
+  return (
+    <div className="border border-mc-border bg-white">
+      <div className="flex items-center justify-between border-b border-mc-border bg-mc-bg px-2 py-1 text-[10px]">
+        <span className="font-semibold uppercase tracking-wide">{label}</span>
+        <span className="text-mc-ink-soft">{recipient}</span>
+      </div>
+      {editing ? (
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={Math.min(10, Math.max(3, text.split("\n").length))}
+          className="block w-full resize-y border-0 bg-white px-2 py-1.5 font-mono text-[11px] leading-snug outline-none"
+          autoFocus
+        />
+      ) : (
+        <pre className="whitespace-pre-wrap px-2 py-1.5 font-mono text-[11px] leading-snug">
+          {text}
+        </pre>
+      )}
+      <div className="flex items-center gap-1 border-t border-mc-border bg-mc-bg px-1.5 py-1 text-[10.5px]">
+        {sent ? (
+          <span className="text-mc-blue">
+            ✓ Queued for send · audit row written
+          </span>
+        ) : editing ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 text-[10.5px] font-semibold hover:bg-mc-yellow-dark"
+            >
+              Save edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setText(body);
+                setEditing(false);
+              }}
+              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
+            >
+              Revert
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setSent(true)}
+              className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 text-[10.5px] font-semibold hover:bg-mc-yellow-dark"
+            >
+              ✓ Approve &amp; send
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(text)}
+              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
+              title="Copy to clipboard"
+            >
+              Copy
+            </button>
+            <span className="ml-auto text-mc-ink-soft">
+              {text.length} chars
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
