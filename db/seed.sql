@@ -103,6 +103,80 @@ INSERT OR REPLACE INTO evidence (id, exception_id, type, r2_key, label) VALUES
   ('ev_006', 'ex_023', 'audio', 'ex_023_carrier_dispute.mp3', 'TODO: hero-5 carrier dispute voicemail'),
   ('ev_007', 'ex_018', 'pdf', 'ex_018_ar_invoice.pdf', 'TODO: AR invoice sample');
 
+-- Bulk placeholder expansion: ex_041 -> ex_200
+WITH RECURSIVE seq(n) AS (
+  SELECT 41
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < 200
+)
+INSERT OR REPLACE INTO exceptions (id, status, type, carrier, lane, sku, created_at, updated_at)
+SELECT
+  printf('ex_%03d', n),
+  'open',
+  CASE (n % 5)
+    WHEN 0 THEN 'damaged_pallet'
+    WHEN 1 THEN 'os_d_short'
+    WHEN 2 THEN 'missed_appt'
+    WHEN 3 THEN 'bol_mismatch'
+    ELSE 'carrier_dispute'
+  END,
+  CASE (n % 4)
+    WHEN 0 THEN 'Carrier Atlas'
+    WHEN 1 THEN 'Carrier Beacon'
+    WHEN 2 THEN 'Carrier Nova'
+    ELSE 'Carrier Horizon'
+  END,
+  printf('LANE-%03d->%03d', n, n + 1),
+  printf('SKU-%04d', 7000 + n),
+  '2026-05-26T17:45:00Z',
+  '2026-05-26T17:45:00Z'
+FROM seq;
+
+WITH RECURSIVE seq(n) AS (
+  SELECT 41
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < 200
+)
+INSERT OR REPLACE INTO orders (id, exception_id, customer_id, asn_id, bol_number, po_number, quantity, unit_value_usd)
+SELECT
+  printf('ord_%03d', n),
+  printf('ex_%03d', n),
+  CASE (n % 3)
+    WHEN 0 THEN 'cust_001'
+    WHEN 1 THEN 'cust_002'
+    ELSE 'cust_003'
+  END,
+  printf('asn_%03d', n),
+  printf('TODO-BOL-%03d', n),
+  printf('TODO-PO-%03d', n),
+  1 + (n % 3),
+  0
+FROM seq;
+
+WITH RECURSIVE seq(n) AS (
+  SELECT 41
+  UNION ALL
+  SELECT n + 1 FROM seq WHERE n < 200
+)
+INSERT OR REPLACE INTO evidence (id, exception_id, type, r2_key, label)
+SELECT
+  printf('ev_%03d', n - 33),
+  printf('ex_%03d', n),
+  CASE (n % 4)
+    WHEN 0 THEN 'photo'
+    WHEN 1 THEN 'audio'
+    WHEN 2 THEN 'pdf'
+    ELSE 'email'
+  END,
+  CASE (n % 4)
+    WHEN 0 THEN printf('placeholder_ex_%03d_photo.jpg', n)
+    WHEN 1 THEN printf('placeholder_ex_%03d_audio.mp3', n)
+    WHEN 2 THEN printf('placeholder_ex_%03d_doc.pdf', n)
+    ELSE printf('placeholder_ex_%03d_email.txt', n)
+  END,
+  printf('TODO: generated placeholder evidence for ex_%03d', n)
+FROM seq;
+
 -- Intentionally no inserts for actions/decisions.
 -- These tables are populated by the worker runtime as the agent executes.
 
