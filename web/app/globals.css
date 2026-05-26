@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mc-yellow: #ffd400;
+  --color-mc-yellow-dark: #e6bf00;
+  --color-mc-blue: #003a70;
+  --color-mc-blue-link: #0050b3;
+  --color-mc-red: #c8102e;
+  --color-mc-bg: #f5f5f0;
+  --color-mc-ink: #1a1a1a;
+  --color-mc-ink-soft: #444;
+  --color-mc-border: #c8c8be;
+  --color-mc-row-alt: #faf9f4;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  background: var(--color-mc-bg);
+  color: var(--color-mc-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+a {
+  color: var(--color-mc-blue-link);
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Modal / panel animations */
+@keyframes fd-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fd-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes fd-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* McMaster-style dense table */
+table.mc-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+table.mc-table th {
+  background: #ebebe1;
+  border: 1px solid var(--color-mc-border);
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-mc-ink);
+  vertical-align: bottom;
+}
+table.mc-table td {
+  border: 1px solid var(--color-mc-border);
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+table.mc-table tbody tr:nth-child(even) td {
+  background: var(--color-mc-row-alt);
+}
+table.mc-table tbody tr:hover td {
+  background: #fffbe0;
+}
