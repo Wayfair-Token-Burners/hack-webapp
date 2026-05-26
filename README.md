@@ -54,24 +54,28 @@ Wayfair runs ~$12B in revenue and serves ~22M customers a year.
 
 Sign up at [subconscious.dev/platform](https://www.subconscious.dev/platform) and copy your key (`sky_...`).
 
-**2. Run the app**
+**2. Create a .env.local file with your Subconscious API key**
 
 ```bash
 pnpm install
 cp .env.example .env.local
 # Set SUBCONSCIOUS_API_KEY in .env.local
+```
 
+**3. Run the app**
+
+```bash
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-**3. Try the two modes**
+**4. Try the two modes**
 
 - **Chat** — fast Q&A with demo tools (good for prototyping UX)
 - **Agent** — multi-step runs with search, long tasks, and MCP stubs (good for track demos)
 
-Use **Image** to attach a photo (e.g. a room shot for Track 1).
+Use **Image** to attach a photo (e.g. a photo of a room or box).
 
 ---
 
