@@ -117,11 +117,13 @@ export function MicLauncher() {
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [context, setContext] = useState<MicContext | null>(null);
   const [autoSendIn, setAutoSendIn] = useState<number | null>(null);
+  const [draftsModalId, setDraftsModalId] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSendTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seenDraftsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const Ctor =
@@ -381,6 +383,10 @@ export function MicLauncher() {
                   };
                 }
                 if (evt.type === "drafts") {
+                  if (!seenDraftsRef.current.has(execId)) {
+                    seenDraftsRef.current.add(execId);
+                    queueMicrotask(() => setDraftsModalId(execId));
+                  }
                   return {
                     ...m,
                     drafts: (evt.drafts ?? {}) as DraftMessages,
@@ -641,7 +647,13 @@ export function MicLauncher() {
               if (m.role === "user") return <UserBubble key={m.id} msg={m} />;
               if (m.role === "note") return <NoteRow key={m.id} msg={m} />;
               if (m.role === "execution")
-                return <ExecutionBubble key={m.id} msg={m} />;
+                return (
+                  <ExecutionBubble
+                    key={m.id}
+                    msg={m}
+                    onOpenDrafts={setDraftsModalId}
+                  />
+                );
               return (
                 <PlanBubble
                   key={m.id}
@@ -756,6 +768,21 @@ export function MicLauncher() {
           </form>
         </div>
       ) : null}
+
+      {draftsModalId
+        ? (() => {
+            const target = messages.find(
+              (m) => m.id === draftsModalId && m.role === "execution",
+            );
+            if (!target || target.role !== "execution" || !target.drafts) return null;
+            return (
+              <DraftReviewModal
+                execution={target}
+                onClose={() => setDraftsModalId(null)}
+              />
+            );
+          })()
+        : null}
     </>
   );
 }
@@ -854,8 +881,15 @@ function NoteRow({ msg }: { msg: NoteMsg }) {
   );
 }
 
-function ExecutionBubble({ msg }: { msg: ExecutionMsg }) {
+function ExecutionBubble({
+  msg,
+  onOpenDrafts,
+}: {
+  msg: ExecutionMsg;
+  onOpenDrafts: (execId: string) => void;
+}) {
   const liveCaret = !msg.done;
+  const draftsCount = msg.drafts ? countDrafts(msg.drafts) : 0;
   return (
     <div className="mr-6 space-y-1.5 border border-mc-blue bg-white px-2 py-1.5">
       <div className="flex items-center justify-between">
@@ -920,24 +954,53 @@ function ExecutionBubble({ msg }: { msg: ExecutionMsg }) {
         </div>
       ) : null}
 
-      {msg.drafts ? <DraftCards drafts={msg.drafts} /> : null}
+      {msg.drafts ? (
+        <button
+          type="button"
+          onClick={() => onOpenDrafts(msg.id)}
+          className="group flex w-full items-center justify-between gap-2 rounded-sm border-2 border-black bg-mc-yellow px-3 py-2 text-left text-[12px] font-semibold transition hover:bg-mc-yellow-dark"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-base leading-none">📨</span>
+            <span>
+              Review agent drafts ({draftsCount})
+              <span className="ml-1 font-normal text-mc-ink-soft">
+                · customer · carrier · AR
+              </span>
+            </span>
+          </span>
+          <span className="font-normal text-mc-ink-soft group-hover:text-mc-ink">
+            open ↗
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function DraftCards({ drafts }: { drafts: DraftMessages }) {
-  const items: Array<{
-    key: keyof DraftMessages;
-    label: string;
-    recipient: string;
-    body: string;
-  }> = [];
+function countDrafts(drafts: DraftMessages): number {
+  let n = 0;
+  if (drafts.customer_message) n++;
+  if (drafts.carrier_message) n++;
+  if (drafts.ar_note) n++;
+  return n;
+}
+
+type DraftItem = {
+  key: keyof DraftMessages;
+  label: string;
+  recipient: string;
+  hint: string;
+};
+
+function buildDraftItems(drafts: DraftMessages): DraftItem[] {
+  const items: DraftItem[] = [];
   if (drafts.customer_message) {
     items.push({
       key: "customer_message",
       label: "Customer reply",
       recipient: "→ customer",
-      body: drafts.customer_message,
+      hint: "Goes out under your name; tone-matched to the inbound complaint.",
     });
   }
   if (drafts.carrier_message) {
@@ -945,7 +1008,7 @@ function DraftCards({ drafts }: { drafts: DraftMessages }) {
       key: "carrier_message",
       label: "Carrier message",
       recipient: "→ carrier ops",
-      body: drafts.carrier_message,
+      hint: "Files the freight claim with the carrier's account team.",
     });
   }
   if (drafts.ar_note) {
@@ -953,121 +1016,288 @@ function DraftCards({ drafts }: { drafts: DraftMessages }) {
       key: "ar_note",
       label: "AR note",
       recipient: "→ accounting",
-      body: drafts.ar_note,
+      hint: "Internal one-liner for the GL / claim register.",
     });
   }
+  return items;
+}
+
+function DraftReviewModal({
+  execution,
+  onClose,
+}: {
+  execution: ExecutionMsg;
+  onClose: () => void;
+}) {
+  const items = buildDraftItems(execution.drafts ?? {});
+  const [step, setStep] = useState(0);
+  const [drafts, setDrafts] = useState<DraftMessages>(execution.drafts ?? {});
+  const [sent, setSent] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (editing) {
+          setEditing(false);
+          return;
+        }
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowRight" && step < items.length - 1) {
+        setStep(step + 1);
+      }
+      if (e.key === "ArrowLeft" && step > 0) {
+        setStep(step - 1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, items.length, onClose, step]);
 
   if (items.length === 0) return null;
-
-  return (
-    <div className="mt-1 space-y-1.5">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-mc-blue-link">
-        Drafted by agent · review before sending
-      </div>
-      {items.map((d) => (
-        <DraftCard key={d.key} label={d.label} recipient={d.recipient} body={d.body} />
-      ))}
-    </div>
+  const current = items[step];
+  const currentBody = (drafts[current.key] ?? "") as string;
+  const totalChars = items.reduce(
+    (n, it) => n + ((drafts[it.key] as string | undefined)?.length ?? 0),
+    0,
   );
-}
-
-function DraftCard({
-  label,
-  recipient,
-  body,
-}: {
-  label: string;
-  recipient: string;
-  body: string;
-}) {
-  const [sent, setSent] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(body);
-
-  // Reset state if the underlying draft changes
-  useEffect(() => {
-    setText(body);
-    setSent(false);
-    setEditing(false);
-  }, [body]);
+  const approvedCount = items.filter((it) => sent[it.key]).length;
+  const allApproved = approvedCount === items.length;
 
   return (
-    <div className="border border-mc-border bg-white">
-      <div className="flex items-center justify-between border-b border-mc-border bg-mc-bg px-2 py-1 text-[10px]">
-        <span className="font-semibold uppercase tracking-wide">{label}</span>
-        <span className="text-mc-ink-soft">{recipient}</span>
-      </div>
-      {editing ? (
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={Math.min(10, Math.max(3, text.split("\n").length))}
-          className="block w-full resize-y border-0 bg-white px-2 py-1.5 font-mono text-[11px] leading-snug outline-none"
-          autoFocus
-        />
-      ) : (
-        <pre className="whitespace-pre-wrap px-2 py-1.5 font-mono text-[11px] leading-snug">
-          {text}
-        </pre>
-      )}
-      <div className="flex items-center gap-1 border-t border-mc-border bg-mc-bg px-1.5 py-1 text-[10.5px]">
-        {sent ? (
-          <span className="text-mc-blue">
-            ✓ Queued for send · audit row written
-          </span>
-        ) : editing ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 text-[10.5px] font-semibold hover:bg-mc-yellow-dark"
-            >
-              Save edit
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setText(body);
-                setEditing(false);
-              }}
-              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
-            >
-              Revert
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => setSent(true)}
-              className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 text-[10.5px] font-semibold hover:bg-mc-yellow-dark"
-            >
-              ✓ Approve &amp; send
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => navigator.clipboard?.writeText(text)}
-              className="rounded-sm border border-mc-border bg-white px-2 py-0.5 text-[10.5px] hover:border-black"
-              title="Copy to clipboard"
-            >
-              Copy
-            </button>
-            <span className="ml-auto text-mc-ink-soft">
-              {text.length} chars
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Agent draft review"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close draft review"
+        className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-md [animation:fd-fade-in_180ms_ease-out]"
+      />
+
+      <article className="relative flex h-[82vh] max-h-[820px] w-full max-w-[880px] flex-col overflow-hidden rounded-md border-2 border-black bg-white shadow-2xl [animation:fd-pop-in_240ms_cubic-bezier(0.2,0.8,0.2,1)]">
+        {/* Header */}
+        <header className="flex items-start justify-between gap-3 border-b border-mc-border bg-mc-yellow px-5 py-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide">
+              <span>Agent draft review</span>
+              {execution.exceptionId ? (
+                <span className="rounded-sm border border-black bg-white px-1.5 py-0.5 font-mono">
+                  {execution.exceptionId}
+                </span>
+              ) : null}
+              {execution.result ? (
+                <span className="rounded-sm border border-black bg-white px-1.5 py-0.5 font-mono">
+                  {execution.result.disposition_code} ·{" "}
+                  {(execution.result.confidence * 100).toFixed(0)}% · $
+                  {execution.result.dollar_impact.toFixed(2)}
+                </span>
+              ) : null}
+            </div>
+            <h2 className="mt-1 font-serif text-xl font-bold leading-tight">
+              Three drafts ready for review
+            </h2>
+            {execution.decision?.reasoning ? (
+              <p className="mt-0.5 text-[11.5px] text-black/70">
+                Agent reasoning: <i>{execution.decision.reasoning}</i>
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-8 w-8 place-items-center rounded-sm border border-black bg-white text-base font-bold hover:bg-mc-yellow-dark"
+          >
+            ✕
+          </button>
+        </header>
+
+        {/* Stepper */}
+        <nav className="flex items-stretch gap-0 border-b border-mc-border bg-mc-bg">
+          {items.map((it, i) => {
+            const isActive = i === step;
+            const isSent = !!sent[it.key];
+            return (
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => {
+                  setEditing(false);
+                  setStep(i);
+                }}
+                className={`flex flex-1 items-center gap-2 border-r border-mc-border px-3 py-2 text-left text-[12px] last:border-r-0 ${
+                  isActive
+                    ? "bg-white font-semibold"
+                    : "bg-mc-bg text-mc-ink-soft hover:bg-white hover:text-mc-ink"
+                }`}
+              >
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border font-mono text-[10px] ${
+                    isSent
+                      ? "border-mc-blue bg-mc-blue text-white"
+                      : isActive
+                        ? "border-black bg-mc-yellow"
+                        : "border-mc-border bg-white"
+                  }`}
+                >
+                  {isSent ? "✓" : i + 1}
+                </span>
+                <span className="flex flex-col leading-tight">
+                  <span>{it.label}</span>
+                  <span className="text-[10px] font-normal text-mc-ink-soft">
+                    {it.recipient}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Body */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex items-baseline justify-between border-b border-mc-border bg-white px-5 py-2 text-[11px] text-mc-ink-soft">
+            <span>{current.hint}</span>
+            <span>
+              {currentBody.length} chars · step {step + 1} of {items.length}
             </span>
-          </>
-        )}
-      </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+            {editing ? (
+              <textarea
+                key={current.key}
+                value={currentBody}
+                onChange={(e) =>
+                  setDrafts({ ...drafts, [current.key]: e.target.value })
+                }
+                autoFocus
+                className="block h-full min-h-[280px] w-full resize-none border border-mc-border bg-white p-3 font-mono text-[13px] leading-relaxed outline-none focus:border-black"
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed">
+                {currentBody}
+              </pre>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="flex flex-wrap items-center gap-2 border-t border-mc-border bg-mc-bg px-5 py-2.5">
+          {sent[current.key] ? (
+            <span className="rounded-sm border border-mc-blue bg-mc-blue/10 px-2 py-1 text-[11.5px] font-semibold text-mc-blue">
+              ✓ Queued for send · audit row written
+            </span>
+          ) : editing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-sm border border-black bg-mc-yellow px-3 py-1.5 text-[12px] font-semibold hover:bg-mc-yellow-dark"
+              >
+                Save edit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDrafts({
+                    ...drafts,
+                    [current.key]: (execution.drafts?.[current.key] ?? "") as string,
+                  });
+                  setEditing(false);
+                }}
+                className="rounded-sm border border-mc-border bg-white px-3 py-1.5 text-[12px] hover:border-black"
+              >
+                Revert to agent
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setSent({ ...sent, [current.key]: true })
+                }
+                className="rounded-sm border border-black bg-mc-yellow px-3 py-1.5 text-[12px] font-semibold hover:bg-mc-yellow-dark"
+              >
+                ✓ Approve &amp; send
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="rounded-sm border border-mc-border bg-white px-3 py-1.5 text-[12px] hover:border-black"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(currentBody)}
+                className="rounded-sm border border-mc-border bg-white px-3 py-1.5 text-[12px] hover:border-black"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+            </>
+          )}
+
+          <div className="ml-auto flex items-center gap-2 text-[11px] text-mc-ink-soft">
+            <span>
+              {approvedCount} / {items.length} approved
+            </span>
+            <button
+              type="button"
+              onClick={() => setStep(Math.max(0, step - 1))}
+              disabled={step === 0}
+              className="rounded-sm border border-mc-border bg-white px-2 py-1 text-[11.5px] hover:border-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            {step < items.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => setStep(step + 1)}
+                className="rounded-sm border border-black bg-white px-2 py-1 text-[11.5px] font-semibold hover:bg-mc-yellow"
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={!allApproved}
+                className="rounded-sm border border-black bg-mc-yellow px-3 py-1 text-[11.5px] font-semibold hover:bg-mc-yellow-dark disabled:cursor-not-allowed disabled:opacity-40"
+                title={
+                  allApproved
+                    ? "Close and finish"
+                    : "Approve remaining drafts to finish"
+                }
+              >
+                Done
+              </button>
+            )}
+          </div>
+        </footer>
+
+        {/* Sub-footer hint */}
+        <div className="border-t border-mc-border bg-white px-5 py-1 text-[10px] text-mc-ink-soft">
+          <kbd className="rounded border border-mc-border bg-mc-bg px-1">←</kbd>{" "}
+          /{" "}
+          <kbd className="rounded border border-mc-border bg-mc-bg px-1">→</kbd>{" "}
+          to navigate ·{" "}
+          <kbd className="rounded border border-mc-border bg-mc-bg px-1">Esc</kbd>{" "}
+          to close · {totalChars} total chars · agent ran in {execution.steps.length}{" "}
+          steps
+        </div>
+      </article>
     </div>
   );
 }
+
 
 function PlanBubble({
   msg,
