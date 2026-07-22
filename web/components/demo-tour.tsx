@@ -64,6 +64,32 @@ const STAGES: Stage[] = [
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/**
+ * driver.js draws its overlay/stage inside requestAnimationFrame callbacks.
+ * Some embedded or throttled browsers never fire rAF for background tabs
+ * (or at all), which leaves the tour invisible: popover at opacity 0 and no
+ * overlay. Probe once; if rAF is dead, replace it with a setTimeout shim.
+ */
+let rafProbed = false;
+function ensureWorkingRaf() {
+  if (rafProbed) return;
+  rafProbed = true;
+  let fired = false;
+  window.requestAnimationFrame(() => {
+    fired = true;
+  });
+  setTimeout(() => {
+    if (fired) return;
+    window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+      window.setTimeout(
+        () => cb(performance.now()),
+        16,
+      )) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = ((id: number) =>
+      window.clearTimeout(id)) as typeof window.cancelAnimationFrame;
+  }, 300);
+}
+
 async function waitForElement(
   selector: string,
   timeoutMs: number,
@@ -227,6 +253,9 @@ export function DemoTour() {
 
   // Auto-start once per visitor.
   useEffect(() => {
+    // Probe rAF immediately so a dead implementation is shimmed before the
+    // first highlight renders (probe resolves in 300ms, tour starts at 900ms).
+    ensureWorkingRaf();
     try {
       if (localStorage.getItem(SEEN_KEY)) return;
       localStorage.setItem(SEEN_KEY, "1");
