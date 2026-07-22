@@ -383,7 +383,12 @@ export function MicLauncher() {
                   };
                 }
                 if (evt.type === "drafts") {
-                  if (!seenDraftsRef.current.has(execId)) {
+                  // Don't auto-open during the guided tour — stage 4 asks
+                  // the visitor to click "Review agent drafts" themselves,
+                  // and a surprise modal would cover the highlight.
+                  const tourActive =
+                    document.body.classList.contains("driver-active");
+                  if (!seenDraftsRef.current.has(execId) && !tourActive) {
                     seenDraftsRef.current.add(execId);
                     queueMicrotask(() => setDraftsModalId(execId));
                   }

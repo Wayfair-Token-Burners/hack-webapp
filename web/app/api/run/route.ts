@@ -76,7 +76,12 @@ function proxyWorker(exceptionId: string, question: string): Response {
 
       try {
         const upstream = await fetch(url, {
-          headers: { accept: "text/event-stream" },
+          headers: {
+            accept: "text/event-stream",
+            ...(process.env.WORKER_PROXY_SECRET
+              ? { "x-freightdesk-proxy": process.env.WORKER_PROXY_SECRET }
+              : {}),
+          },
         });
         if (!upstream.ok || !upstream.body) {
           emit({

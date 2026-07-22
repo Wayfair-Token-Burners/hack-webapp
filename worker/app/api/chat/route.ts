@@ -1,10 +1,14 @@
 import { createAgentUIStreamResponse } from "ai";
 import { chatAgent, researchAgent, type AgentMode } from "@/lib/agents";
 import { requireSubconsciousApiKey } from "@/lib/subconscious";
+import { checkProxySecret } from "@/lib/proxy-guard";
 
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const forbidden = checkProxySecret(request);
+  if (forbidden) return forbidden;
+
   try {
     requireSubconsciousApiKey();
   } catch (error) {
