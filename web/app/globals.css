@@ -116,3 +116,10 @@ table.mc-table tbody tr:hover td {
   background-color: white;
   color: black;
 }
+
+/* Safety net: never allow the tour popover to be stuck invisible if the
+   fade animation fails to run (throttled tabs, reduced motion, etc.). */
+.driver-popover.fd-tour {
+  animation: none !important;
+  opacity: 1 !important;
+}

@@ -130,10 +130,18 @@ export function DemoTour() {
     const d = driver({
       showProgress: false,
       allowKeyboardControl: true,
+      // No fade animation: driver's fade leaves the popover at opacity 0
+      // until the CSS animation completes, which can never happen in
+      // throttled/background tabs. Synchronous rendering is bulletproof.
+      animate: false,
       overlayOpacity: 0.6,
       stagePadding: 6,
       stageRadius: 8,
       popoverClass: "fd-tour",
+      // A stray click on the dark overlay must NOT kill the tour — visitors
+      // click around while waiting for the agent. Close is still available
+      // via the ✕ button and Esc.
+      overlayClickBehavior: () => {},
       // The highlighted element stays clickable; everything else is blocked
       // by the overlay. Clicking the glowing button is the only way forward.
       disableActiveInteraction: false,
