@@ -212,6 +212,21 @@ export function DemoTour() {
       if (isCancelled()) return;
 
       for (const stage of STAGES) {
+        // If the next button isn't in the DOM yet (e.g. the agent is still
+        // streaming before "Review agent drafts" appears), replace the stale
+        // previous highlight with a neutral waiting card instead of leaving
+        // a popover anchored to a removed element.
+        if (!document.querySelector(stage.selector)) {
+          d.highlight({
+            popover: {
+              title: "⏳ Watch the agent work",
+              description:
+                "The next step lights up automatically as soon as it's ready.",
+              showButtons: ["close"],
+            },
+          });
+        }
+
         const el = await waitForElement(
           stage.selector,
           stage.waitMs ?? 10_000,
@@ -230,7 +245,14 @@ export function DemoTour() {
           },
         });
 
+        // driver.js only repositions on window scroll/resize. Our targets
+        // live inside scrolling panels and streaming layouts, so poll and
+        // refresh to keep the cutout glued to the (moving) button.
+        const refreshTimer = setInterval(() => {
+          if (d.isActive() && el.isConnected) d.refresh();
+        }, 250);
         const clicked = await waitForClick(el, isCancelled);
+        clearInterval(refreshTimer);
         if (!clicked || isCancelled()) return;
       }
 
