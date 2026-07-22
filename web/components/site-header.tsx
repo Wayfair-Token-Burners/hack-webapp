@@ -1,11 +1,6 @@
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
-import { signOutAction } from "@/lib/auth-actions";
 
-export async function SiteHeader() {
-  const session = await getSession();
-  const shortPlant = session?.plant.split("·")[0]?.trim() ?? "";
-
+export function SiteHeader() {
   return (
     <header className="border-b border-mc-border bg-white">
       {/* Top thin utility strip */}
@@ -19,23 +14,9 @@ export async function SiteHeader() {
             <Link href="#">Help</Link>
             <Link href="#">Order History</Link>
             <Link href="#">Punch-Out</Link>
-            {session ? (
-              <>
-                <span>
-                  Signed in as <b className="text-mc-ink">{session.name}</b>
-                </span>
-                <form action={signOutAction}>
-                  <button
-                    type="submit"
-                    className="cursor-pointer text-mc-blue-link hover:underline"
-                  >
-                    Sign out
-                  </button>
-                </form>
-              </>
-            ) : (
-              <Link href="/signin">Sign in</Link>
-            )}
+            <span>
+              Signed in as <b className="text-mc-ink">Maria Chen</b>
+            </span>
           </nav>
         </div>
       </div>
@@ -106,22 +87,9 @@ export async function SiteHeader() {
             <Link href="#" className="!text-black hover:underline">
               Compliance Docs
             </Link>
-            {session ? (
-              <span className="ml-auto font-normal text-black/70">
-                Account:{" "}
-                <b>
-                  {session.name} · {shortPlant} · {session.role}
-                </b>
-              </span>
-            ) : (
-              <Link
-                href="/signin"
-                data-tour="signin"
-                className="ml-auto rounded-sm border border-black bg-black px-2 py-0.5 !text-mc-yellow !no-underline hover:bg-mc-ink"
-              >
-                Sign in →
-              </Link>
-            )}
+            <span className="ml-auto font-normal text-black/70">
+              Account: <b>Maria Chen · Plant 14 · Buyer · Tier 2</b>
+            </span>
           </nav>
         </div>
       </div>

@@ -959,6 +959,7 @@ function ExecutionBubble({
         <button
           type="button"
           onClick={() => onOpenDrafts(msg.id)}
+          data-tour="review-drafts"
           className="group flex w-full items-center justify-between gap-2 rounded-sm border-2 border-black bg-mc-yellow px-3 py-2 text-left text-[12px] font-semibold transition hover:bg-mc-yellow-dark"
         >
           <span className="flex items-center gap-2">
@@ -1224,6 +1225,7 @@ function DraftReviewModal({
                 onClick={() =>
                   setSent({ ...sent, [current.key]: true })
                 }
+                data-tour="approve-send"
                 className="rounded-sm border border-black bg-mc-yellow px-3 py-1.5 text-[12px] font-semibold hover:bg-mc-yellow-dark"
               >
                 ✓ Approve &amp; send

@@ -1,121 +1,246 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { driver, type DriveStep } from "driver.js";
+import { driver, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
 
-const SEEN_KEY_OUT = "fd_tour_seen_signed_out";
-const SEEN_KEY_IN = "fd_tour_seen_signed_in";
+const SEEN_KEY = "fd_tour_seen_v2";
 
-function buildSteps(signedIn: boolean): DriveStep[] {
-  const steps: DriveStep[] = [
-    {
-      popover: {
-        title: "👋 Welcome to FreightDesk",
-        description:
-          "A 2-hour hackathon build (Boston Tech Week · Subconscious × Wayfair × Baseten × Cloudflare). It's a mock wholesale portal with an AI agent that clears the freight-exception queue — damaged pallets, shorts, BOL mismatches — while ops sleeps in. This quick tour shows you where to click.",
-      },
-    },
-    {
-      element: '[data-tour="search"]',
-      popover: {
-        title: "A believable B2B storefront",
-        description:
-          "The catalog, pricing, and procurement notices are all seeded mock data — furniture components sold to plant managers. It exists so the agent has a real-feeling world to operate in.",
-        side: "bottom",
-      },
-    },
-  ];
+type Stage = {
+  selector: string;
+  title: string;
+  description: string;
+  side?: "top" | "bottom" | "left" | "right";
+  /** How long to wait for the element to appear (ms). */
+  waitMs?: number;
+};
 
-  if (!signedIn) {
-    steps.push({
-      element: '[data-tour="signin"]',
-      popover: {
-        title: "Sign in to meet the agent",
-        description:
-          "Auth is mocked — type anything, or leave both fields blank to sign in as Maria Chen, the Tier-2 exception ops analyst. Once you're in, the AI inbox and agent appear. That's where the fun is.",
-        side: "bottom",
-      },
-    });
-  } else {
-    steps.push(
-      {
-        element: '[data-tour="inbox"]',
-        popover: {
-          title: "📬 Customer complaint inbox",
-          description:
-            "Angry emails about crushed pallets and short shipments. Open one and hit “Run agent” — the AI reads the photo, listens to the driver's voicemail, parses the BOL, and proposes a resolution.",
-          side: "left",
-        },
-      },
-      {
-        element: '[data-tour="mic"]',
-        popover: {
-          title: "🎤 Ask Wayfair AI",
-          description:
-            "A plan-mode agent: ask it anything about an exception, review the plan it proposes, approve it, then watch the live tool-by-tool execution trace with a final disposition and draft messages.",
-          side: "left",
-        },
-      },
-      {
-        popover: {
-          title: "Try this",
-          description:
-            "Open the inbox → pick a Critical complaint → click “Run agent”. Then approve the plan and watch the trace stream in. That's the whole demo in ~60 seconds.",
-        },
-      },
-    );
+/**
+ * The one real user journey, in click order. Each stage highlights exactly
+ * the button the visitor must click; the click itself advances the tour.
+ */
+const STAGES: Stage[] = [
+  {
+    selector: '[data-tour="inbox"]',
+    title: "1 · Open the complaint inbox",
+    description:
+      "Click the envelope. It holds angry customer emails about crushed pallets and short shipments — the queue the agent exists to clear.",
+    side: "left",
+    waitMs: 10_000,
+  },
+  {
+    selector: '[data-tour="complaint-hero"]',
+    title: "2 · Open the top complaint",
+    description:
+      "Click this one — a damaged-pallet case with photo, driver voicemail, and BOL evidence attached. The richest case in the queue.",
+    side: "top",
+    waitMs: 10_000,
+  },
+  {
+    selector: '[data-tour="run-agent"]',
+    title: "3 · Run the AI agent",
+    description:
+      "Click it. The agent reads the photo, listens to the voicemail, parses the BOL, decides a disposition, and drafts the outbound messages — live, step by step.",
+    side: "top",
+    waitMs: 10_000,
+  },
+  {
+    selector: '[data-tour="review-drafts"]',
+    title: "4 · Review what it wrote",
+    description:
+      "The trace is done. Click to review the drafts the agent staged — nothing is sent without a human.",
+    side: "top",
+    waitMs: 90_000,
+  },
+  {
+    selector: '[data-tour="approve-send"]',
+    title: "5 · Approve & send",
+    description:
+      "You're the human in the loop. Approve this draft — then step through and approve the rest to finish the case.",
+    side: "top",
+    waitMs: 15_000,
+  },
+];
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+async function waitForElement(
+  selector: string,
+  timeoutMs: number,
+  isCancelled: () => boolean,
+): Promise<HTMLElement | null> {
+  const started = Date.now();
+  while (!isCancelled() && Date.now() - started < timeoutMs) {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (el) return el;
+    await sleep(150);
   }
-
-  return steps;
+  return null;
 }
 
-export function DemoTour({ signedIn }: { signedIn: boolean }) {
-  const activeRef = useRef(false);
+/** Resolves true when the element is clicked, false on cancel/removal. */
+function waitForClick(
+  el: HTMLElement,
+  isCancelled: () => boolean,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onClick = () => {
+      cleanup();
+      resolve(true);
+    };
+    const poll = setInterval(() => {
+      if (isCancelled() || !el.isConnected) {
+        cleanup();
+        resolve(false);
+      }
+    }, 250);
+    const cleanup = () => {
+      el.removeEventListener("click", onClick, true);
+      clearInterval(poll);
+    };
+    el.addEventListener("click", onClick, { capture: true, once: true });
+  });
+}
 
-  const startTour = useCallback(() => {
-    if (activeRef.current) return;
-    const steps = buildSteps(signedIn).filter(
-      (s) => !s.element || document.querySelector(s.element as string),
-    );
-    if (steps.length === 0) return;
+export function DemoTour() {
+  const runningRef = useRef(false);
+  const driverRef = useRef<Driver | null>(null);
+  const cancelRunRef = useRef<(() => void) | null>(null);
 
-    activeRef.current = true;
+  const startTour = useCallback(async () => {
+    // A second invocation (Tour button) cancels the in-flight run and
+    // restarts from the top, so the button always works.
+    if (runningRef.current) {
+      cancelRunRef.current?.();
+      const waitStart = Date.now();
+      while (runningRef.current && Date.now() - waitStart < 3_000) {
+        await sleep(50);
+      }
+      if (runningRef.current) return;
+    }
+    runningRef.current = true;
+
+    // One driver instance for the whole run. Cancellation (Esc / ✕ /
+    // overlay click) is detected by polling `isActive()` — driver.js resets
+    // that state synchronously on destroy, unlike the onDestroyed hook which
+    // can be skipped depending on animation timing.
+    let internalDestroy = false;
+    let externallyDestroyed = false;
+
     const d = driver({
-      showProgress: true,
-      progressText: "{{current}} of {{total}}",
-      nextBtnText: "Next →",
-      prevBtnText: "← Back",
-      doneBtnText: signedIn ? "Let me try" : "Got it",
-      overlayOpacity: 0.55,
+      showProgress: false,
+      allowKeyboardControl: true,
+      overlayOpacity: 0.6,
       stagePadding: 6,
-      stageRadius: 6,
+      stageRadius: 8,
       popoverClass: "fd-tour",
-      steps,
+      // The highlighted element stays clickable; everything else is blocked
+      // by the overlay. Clicking the glowing button is the only way forward.
+      disableActiveInteraction: false,
       onDestroyed: () => {
-        activeRef.current = false;
+        if (!internalDestroy) externallyDestroyed = true;
       },
     });
-    d.drive();
-  }, [signedIn]);
+    driverRef.current = d;
+    const isCancelled = () => externallyDestroyed || !d.isActive();
+    cancelRunRef.current = () => {
+      externallyDestroyed = true;
+      internalDestroy = true;
+      d.destroy();
+      internalDestroy = false;
+    };
 
-  // Auto-start once per visitor (separately for signed-out and signed-in views)
-  useEffect(() => {
-    const key = signedIn ? SEEN_KEY_IN : SEEN_KEY_OUT;
+    const finish = () => {
+      if (d.isActive()) {
+        internalDestroy = true;
+        d.destroy();
+        internalDestroy = false;
+      }
+      cancelRunRef.current = null;
+      driverRef.current = null;
+      runningRef.current = false;
+    };
+
     try {
-      if (localStorage.getItem(key)) return;
-      localStorage.setItem(key, "1");
+      // Intro card — the only stage advanced by its own button.
+      let introNext = false;
+      d.highlight({
+        popover: {
+          title: "👋 This is FreightDesk",
+          description:
+            "A 2-hour hackathon build: an AI agent that clears a freight-exception queue — damaged pallets, shorts, BOL mismatches — with a human approving every outbound message. There's exactly one journey. Follow the highlight and click only the glowing button.",
+          showButtons: ["next", "close"],
+          nextBtnText: "Show me →",
+          onNextClick: () => {
+            introNext = true;
+          },
+        },
+      });
+      while (!introNext && !isCancelled()) await sleep(100);
+      if (isCancelled()) return;
+
+      for (const stage of STAGES) {
+        const el = await waitForElement(
+          stage.selector,
+          stage.waitMs ?? 10_000,
+          isCancelled,
+        );
+        if (!el || isCancelled()) return;
+
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        d.highlight({
+          element: el,
+          popover: {
+            title: stage.title,
+            description: stage.description,
+            side: stage.side,
+            showButtons: ["close"],
+          },
+        });
+
+        const clicked = await waitForClick(el, isCancelled);
+        if (!clicked || isCancelled()) return;
+      }
+
+      // Finale — closed by the visitor.
+      d.highlight({
+        popover: {
+          title: "🎉 That's the whole loop",
+          description:
+            "Complaint in → evidence read → disposition decided → drafts staged → human approves. Approve the remaining drafts and hit Done to close the case. Replay anytime with the Tour button, bottom-left.",
+          showButtons: ["close"],
+        },
+      });
+      while (!isCancelled()) await sleep(200);
+    } finally {
+      finish();
+    }
+  }, []);
+
+  // Auto-start once per visitor.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SEEN_KEY)) return;
+      localStorage.setItem(SEEN_KEY, "1");
     } catch {
       return;
     }
-    const t = setTimeout(startTour, 900);
+    const t = setTimeout(() => void startTour(), 900);
     return () => clearTimeout(t);
-  }, [signedIn, startTour]);
+  }, [startTour]);
+
+  // Tear down on unmount.
+  useEffect(() => {
+    return () => {
+      driverRef.current?.destroy();
+      driverRef.current = null;
+    };
+  }, []);
 
   return (
     <button
       type="button"
-      onClick={startTour}
+      onClick={() => void startTour()}
       aria-label="Replay the guided tour"
       title="What is this? Take the tour"
       className="fixed bottom-5 left-5 z-40 flex h-10 items-center gap-2 rounded-full border-2 border-black bg-white px-3.5 text-[12px] font-semibold shadow-lg transition hover:bg-mc-yellow"

@@ -1,5 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import {
+  MAX_CONTEXT_LINES,
+  MAX_CONTEXT_LINE_CHARS,
+  MAX_QUESTION_CHARS,
+  rateLimit,
+  truncate,
+} from "@/lib/api-guard";
+
 type PlanStep = { kind: string; label: string; detail: string };
 
 function generatePlan(question: string, contextLines: string[]): {
@@ -129,13 +137,18 @@ function generatePlan(question: string, contextLines: string[]): {
 }
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req);
+  if (limited) return limited;
+
   let question = "";
   let context: string[] = [];
   try {
     const body = await req.json();
-    question = String(body?.question ?? "").trim();
+    question = truncate(String(body?.question ?? "").trim(), MAX_QUESTION_CHARS);
     if (Array.isArray(body?.context)) {
-      context = body.context.map((s: unknown) => String(s));
+      context = body.context
+        .slice(0, MAX_CONTEXT_LINES)
+        .map((s: unknown) => truncate(String(s), MAX_CONTEXT_LINE_CHARS));
     }
   } catch {
     /* empty body */

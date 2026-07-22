@@ -1,6 +1,14 @@
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+import {
+  ALLOWED_EXCEPTION_IDS,
+  MAX_PLAN_STEPS,
+  MAX_QUESTION_CHARS,
+  rateLimit,
+  truncate,
+} from "@/lib/api-guard";
+
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:3000";
 
 type PlanStep = { kind: string; label: string; detail: string };
@@ -9,6 +17,9 @@ type Plan = { intent: string; steps: PlanStep[] };
 type Emit = (obj: unknown) => void;
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req);
+  if (limited) return limited;
+
   let body: Record<string, unknown> = {};
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -18,17 +29,28 @@ export async function POST(req: Request) {
 
   const exceptionId =
     typeof body.exceptionId === "string" ? body.exceptionId : undefined;
-  const question = typeof body.question === "string" ? body.question : "";
+  const question =
+    typeof body.question === "string"
+      ? truncate(body.question, MAX_QUESTION_CHARS)
+      : "";
   const plan =
     body.plan && typeof body.plan === "object"
       ? (body.plan as Plan)
       : null;
 
   if (exceptionId) {
+    // Only seeded hero cases may reach the worker — this endpoint spends
+    // real inference credits upstream.
+    if (!ALLOWED_EXCEPTION_IDS.has(exceptionId)) {
+      return Response.json(
+        { error: "Unknown exception ID" },
+        { status: 400 },
+      );
+    }
     return proxyWorker(exceptionId, question);
   }
 
-  if (!plan || !Array.isArray(plan.steps)) {
+  if (!plan || !Array.isArray(plan.steps) || plan.steps.length > MAX_PLAN_STEPS) {
     return Response.json(
       { error: "Missing plan or exceptionId" },
       { status: 400 },

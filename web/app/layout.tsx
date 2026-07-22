@@ -5,7 +5,6 @@ import { SiteFooter } from "@/components/site-footer";
 import { MicLauncher } from "@/components/mic-launcher";
 import { InboxLauncher } from "@/components/inbox-launcher";
 import { DemoTour } from "@/components/demo-tour";
-import { getSession } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Wayfair Supply — Industrial Furniture Components",
@@ -13,10 +12,9 @@ export const metadata: Metadata = {
     "Wholesale catalog of frames, casters, slides, fabric, foam, panels, and hardware for furniture manufacturers.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getSession();
   return (
     <html lang="en" className="h-full">
       <body className="flex min-h-full flex-col bg-mc-bg text-mc-ink">
@@ -25,13 +23,9 @@ export default async function RootLayout({
           {children}
         </main>
         <SiteFooter />
-        {session ? (
-          <>
-            <MicLauncher />
-            <InboxLauncher />
-          </>
-        ) : null}
-        <DemoTour signedIn={Boolean(session)} />
+        <MicLauncher />
+        <InboxLauncher />
+        <DemoTour />
       </body>
     </html>
   );

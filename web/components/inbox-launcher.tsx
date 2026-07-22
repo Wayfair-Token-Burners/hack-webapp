@@ -149,6 +149,7 @@ function InboxModal({
               <button
                 type="button"
                 onClick={() => onPick(c.id)}
+                data-tour={c.exception.id === "ex_001" ? "complaint-hero" : undefined}
                 className="block w-full cursor-pointer px-4 py-3 text-left hover:bg-mc-bg"
               >
                 <div className="flex items-center gap-2 text-[12px]">
@@ -388,6 +389,7 @@ function DetailModal({
             <button
               type="button"
               onClick={onRunAgent}
+              data-tour="run-agent"
               className="rounded-sm border border-black bg-mc-yellow px-2 py-0.5 font-semibold hover:bg-mc-yellow-dark"
               title={
                 workerId
