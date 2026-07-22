@@ -4,8 +4,6 @@ import { useCallback, useEffect, useRef } from "react";
 import { driver, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
 
-const SEEN_KEY = "fd_tour_seen_v2";
-
 type Stage = {
   selector: string;
   title: string;
@@ -134,7 +132,7 @@ export function DemoTour() {
   const cancelRunRef = useRef<(() => void) | null>(null);
 
   const startTour = useCallback(async () => {
-    // A second invocation (Tour button) cancels the in-flight run and
+    // A second invocation cancels the in-flight run and
     // restarts from the top, so the button always works.
     if (runningRef.current) {
       cancelRunRef.current?.();
@@ -241,7 +239,7 @@ export function DemoTour() {
         popover: {
           title: "🎉 That's the whole loop",
           description:
-            "Complaint in → evidence read → disposition decided → drafts staged → human approves. Approve the remaining drafts and hit Done to close the case. Replay anytime with the Tour button, bottom-left.",
+            "Complaint in → evidence read → disposition decided → drafts staged → human approves. Approve the remaining drafts and hit Done to close the case — or poke around; everything you saw is live.",
           showButtons: ["close"],
         },
       });
@@ -251,17 +249,12 @@ export function DemoTour() {
     }
   }, []);
 
-  // Auto-start once per visitor.
+  // Autoplay on every page load — the tour IS the demo's front door.
+  // Visitors who already know the flow can dismiss it with ✕ or Esc.
   useEffect(() => {
     // Probe rAF immediately so a dead implementation is shimmed before the
     // first highlight renders (probe resolves in 300ms, tour starts at 900ms).
     ensureWorkingRaf();
-    try {
-      if (localStorage.getItem(SEEN_KEY)) return;
-      localStorage.setItem(SEEN_KEY, "1");
-    } catch {
-      return;
-    }
     const t = setTimeout(() => void startTour(), 900);
     return () => clearTimeout(t);
   }, [startTour]);
@@ -274,18 +267,5 @@ export function DemoTour() {
     };
   }, []);
 
-  return (
-    <button
-      type="button"
-      onClick={() => void startTour()}
-      aria-label="Replay the guided tour"
-      title="What is this? Take the tour"
-      className="fixed bottom-5 left-5 z-40 flex h-10 items-center gap-2 rounded-full border-2 border-black bg-white px-3.5 text-[12px] font-semibold shadow-lg transition hover:bg-mc-yellow"
-    >
-      <span className="grid h-5 w-5 place-items-center rounded-full bg-black font-mono text-[11px] font-bold text-mc-yellow">
-        ?
-      </span>
-      Tour
-    </button>
-  );
+  return null;
 }
