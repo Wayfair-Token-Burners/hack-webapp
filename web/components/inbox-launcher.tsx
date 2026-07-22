@@ -45,6 +45,7 @@ export function InboxLauncher() {
       <button
         type="button"
         onClick={() => setInboxOpen(true)}
+        data-tour="inbox"
         aria-label={`Open customer complaint inbox · ${unread} unread`}
         className="fixed bottom-24 right-5 z-40 grid h-14 w-14 place-items-center rounded-full border-2 border-black bg-white shadow-lg transition hover:bg-mc-bg"
       >

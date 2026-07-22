@@ -593,6 +593,7 @@ export function MicLauncher() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        data-tour="mic"
         aria-label={open ? "Close Wayfair AI" : "Ask Wayfair AI"}
         className={`fixed bottom-5 right-5 z-50 grid h-14 w-14 place-items-center rounded-full border-2 border-black shadow-lg transition ${
           open ? "bg-white hover:bg-mc-bg" : "bg-mc-yellow hover:bg-mc-yellow-dark"

@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { MicLauncher } from "@/components/mic-launcher";
 import { InboxLauncher } from "@/components/inbox-launcher";
+import { DemoTour } from "@/components/demo-tour";
 import { getSession } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default async function RootLayout({
             <InboxLauncher />
           </>
         ) : null}
+        <DemoTour signedIn={Boolean(session)} />
       </body>
     </html>
   );

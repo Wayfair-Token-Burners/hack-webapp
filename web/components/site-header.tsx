@@ -52,7 +52,7 @@ export async function SiteHeader() {
             </span>
           </Link>
 
-          <form className="flex flex-1 items-stretch">
+          <form data-tour="search" className="flex flex-1 items-stretch">
             <input
               type="search"
               placeholder="Search part numbers, materials, dimensions…"
@@ -116,6 +116,7 @@ export async function SiteHeader() {
             ) : (
               <Link
                 href="/signin"
+                data-tour="signin"
                 className="ml-auto rounded-sm border border-black bg-black px-2 py-0.5 !text-mc-yellow !no-underline hover:bg-mc-ink"
               >
                 Sign in →

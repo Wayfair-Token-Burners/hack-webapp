@@ -73,3 +73,46 @@ table.mc-table tbody tr:nth-child(even) td {
 table.mc-table tbody tr:hover td {
   background: #fffbe0;
 }
+
+/* Driver.js tour — match the FreightDesk / McMaster look */
+.driver-popover.fd-tour {
+  border: 2px solid black;
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  font-family: inherit;
+  max-width: 340px;
+}
+.driver-popover.fd-tour .driver-popover-title {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 15px;
+  font-weight: 700;
+}
+.driver-popover.fd-tour .driver-popover-description {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-mc-ink);
+}
+.driver-popover.fd-tour .driver-popover-progress-text {
+  font-size: 11px;
+  color: var(--color-mc-ink-soft);
+}
+.driver-popover.fd-tour button.driver-popover-next-btn,
+.driver-popover.fd-tour button.driver-popover-prev-btn {
+  border: 1px solid black;
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: none;
+}
+.driver-popover.fd-tour button.driver-popover-next-btn {
+  background-color: var(--color-mc-yellow);
+  color: black;
+}
+.driver-popover.fd-tour button.driver-popover-next-btn:hover {
+  background-color: var(--color-mc-yellow-dark);
+}
+.driver-popover.fd-tour button.driver-popover-prev-btn {
+  background-color: white;
+  color: black;
+}
